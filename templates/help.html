@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset='utf-8' />
+    <title>Visualization</title>
+    <meta name='viewport' content='initial-scale=1,maximum-scale=1,user-scalable=no' />
+    <link href="https://fonts.googleapis.com/css?family=Open+Sans" rel="stylesheet">
+    <script src='https://api.tiles.mapbox.com/mapbox-gl-js/v0.40.0/mapbox-gl.js'></script>
+    <link href='https://api.tiles.mapbox.com/mapbox-gl-js/v0.40.0/mapbox-gl.css' rel='stylesheet' />
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
+    <link rel="stylesheet" href="static/css/main.css">
+    <script src="static/js/mapbox-gl-circle.min.js"></script>
+</head>
+<style>
+    .marker {
+        background-image: url('static/images/mapbox-icon.png');
+        background-size: cover;
+        width: 50px;
+        height: 50px;
+        border-radius: 50%;
+        cursor: pointer;
+    }
+
+    .notiMarker {
+        background-image: url('static/images/noti.png');
+        background-size: cover;
+        width: 50px;
+        height: 50px;
+        border-radius: 50%;
+        cursor: pointer;
+    }
+
+    .helpMarker {
+        background-image: url('static/images/help.png');
+        background-size: cover;
+        width: 50px;
+        height: 50px;
+        border-radius: 50%;
+        cursor: pointer;
+    }
+</style>
+<body>
+
+<div id='map'></div>
+<div id='console'>
+  <div class='session' id='sliderbar'>
+  <h2>Condition: <label id='condition'></label></h2>
+  <h2>didHelp: <label id='didHelp'></label></h2>
+  <h2>DateTime: <label id='localTime'></label></h2>
+  <h2>Weekday: <label id='weekDay'></label></h2>
+  <h2>Hour: <label id='hour'></label></h2>
+  <h2>notification received: <label id='notiDistance'></label></h2>
+  <h2>interacted with phone: <label id='helpDistance'></label></h2>
+  <h2>User: <label id='user'></label></h2>
+  <input id='slider' class='slider' type='range' min='0' max=0 step='1' value='0' />
+</div>
+
+<div>
+<select id='selectUser' onchange="selectUser()">
+{% for item in data.key %}
+  <option value="{{item}}">{{item}}</option>
+{%endfor%}
+</select>
+</div>
+
+<script>
+mapboxgl.accessToken = 'pk.eyJ1IjoieW9uZ3N1bmciLCJhIjoiY2l3Z3FkZThnMDB1bjJ6cDkwZHhzdDg3OSJ9.Tbt2yzX6UV2toSVV3Yi-9g';
+
+var taskLat = 42.058334;
+var taskLon = -87.683653;
+
+var weekDayDict = {1: "Monday", 2: 'Tuesday', 3: 'Wednesday', 4: 'Thursday', 5: 'Friday', 6: 'Saturday', 7: 'Sunday'};
+
+// Important thing here.
+var data = JSON.parse('{{ data | tojson | safe}}');
+
+var currentRouteCoordinates;
+
+var notiCoordinate;
+
+var helpCoordinate;
+
+var sliderMax = 0;
+
+var notiMarker;
+
+var helpMarker;
+
+var prevIndex = "";
+
+var map = new mapboxgl.Map({
+  container: 'map',
+  style: '../static/json/bright-v8.json',
+  // style: 'https://openmaptiles.github.io/osm-bright-gl-style/style-cdn.json',
+  center: [taskLon, taskLat],
+  zoom: 15
+});
+
+// Example geojson file
+var geojson = {
+    "type": "FeatureCollection",
+    "features": [{'geometry': {'coordinates': [[-87.635986, 41.925685],
+                               [-87.639076, 41.925621],
+                               [-87.641437, 41.925589],
+                               [-87.64399, 41.92551],
+                               [-87.646329, 41.925494],
+                               [-87.646286, 41.924903],
+                               [-87.646265, 41.924184],
+                               [-87.646265, 41.923674],
+                               [-87.646243, 41.923179],
+                               [-87.646179, 41.921662]],
+               'type': 'LineString'},
+  'type': 'Feature'}]
+};
+
+var colorScheme = {
+  '5':'#002f7c',
+  '4': '#0254db',
+  '3': '#0563ff',
+  '2': '#4d8ef9',
+  '1': '#9ec2ff',
+}
+
+// adding task locaiton marker to a map
+// TODO: we need to add notification and helped marker.
+
+var el = document.createElement('div');
+el.className = 'marker';
+
+var marker = new mapboxgl.Marker(el)
+.setLngLat([taskLon, taskLat])
+.addTo(map);
+
+function makeid() {
+  // randomly generate an id for each route;
+
+  var text = "";
+  var possible = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+
+  for (var i = 0; i < 5; i++)
+    text += possible.charAt(Math.floor(Math.random() * possible.length));
+
+  return text;
+}
+
+
+function addCircle(lat, lon, radius, color) {
+  // API documentation for drawing circles on mapbox gl
+  // https://www.npmjs.com/package/mapbox-gl-circle
+
+  var circle = new MapboxCircle({lat: lat, lng: lon}, radius, {
+        fillOpacity: 0,
+        strokeColor: color,
+        strokeWeight: 3
+    }).addTo(map);
+}
+
+
+addCircle(taskLat, taskLon, 100, '#fd882d')
+addCircle(taskLat, taskLon, 50, '#43c2c1')
+
+// var myCircle = new MapboxCircle({lat: taskLat, lng: taskLon}, 100, {
+//         editable: false,
+//         minRadius: 100,
+//         fillOpacity: 0,
+//         strokeColor: '#b30e50',
+//         strokeWeight: 3
+//     }).addTo(map);
+
+// var circle50 = new MapboxCircle({lat: taskLat, lng: taskLon}, 50, {
+//         editable: false,
+//         minRadius: 50,
+//         fillOpacity: 0,
+//         strokeColor: '#43c2c1',
+//         strokeWeight: 3
+//     }).addTo(map);
+
+function selectUser() {
+  // we want to show routes and decisions for each user's activity.
+
+  if (prevIndex!="") {
+    map.removeLayer(prevIndex);
+  }
+
+  document.getElementById('slider').value = 0
+
+  var selectList = document.getElementById('selectUser');
+
+  // selected option index
+  var index = selectList.selectedIndex;
+
+  var user = document.getElementById('user');
+  user.innerHTML = data.user[index];
+
+  // what was the condition
+  var condition = document.getElementById('condition');
+  condition.innerHTML = data.condition[index];
+
+  // did help?
+  var didHelp = document.getElementById('didHelp');
+  didHelp.innerHTML = data.didHelp[index];
+
+  // what was the local time?
+  var localTime = document.getElementById('localTime');
+
+  // FIXME: why notiTime and localTime is the same?? one should be UTC timestamp and the other one CST.
+  console.log(data.notiTime[index]);
+  console.log(data.localTime[index]);
+  var date = new Date(data.notiTime[index]*1000)
+  localTime.innerHTML = date;
+
+  var weekDay = document.getElementById('weekDay');
+  weekDay.innerHTML = weekDayDict[data.weekday[index]];
+
+  var hour = document.getElementById('hour');
+  hour.innerHTML = data.hour[index];
+
+  currentRouteCoordinates = data.routeCoordinates[index];
+
+  sliderMax = currentRouteCoordinates.length
+  console.log(sliderMax);
+  document.getElementById('slider').max = sliderMax;
+
+  var notiDistance = document.getElementById('notiDistance');
+  var helpDistance = document.getElementById('helpDistance');
+  var home = document.getElementById('home');
+
+  notiDistance.innerHTML = parseInt(data.notiDistance[index]) + " meters from coffee lab";
+  helpDistance.innerHTML = parseInt(data.helpDistance[index]) + " meters from coffee lab";
+
+  notiCoordinate = data.notiCoordinate[index]
+
+  // remove previous markers
+  if (notiMarker !== undefined) {
+    notiMarker.remove();
+  }
+
+  if (helpMarker !== undefined) {
+    helpMarker.remove();
+  }
+
+
+  // adding marker for notification
+  var elNoti = document.createElement('div');
+  elNoti.className = 'notiMarker';
+
+  notiMarker = new mapboxgl.Marker(elNoti)
+  .setLngLat([notiCoordinate[1], notiCoordinate[0]])
+  .addTo(map);
+
+  helpCoordinate = data.helpCoordinate[index]
+  var elHelp = document.createElement('div');
+  elHelp.className = 'helpMarker';
+
+  helpMarker = new mapboxgl.Marker(elHelp)
+  .setLngLat([helpCoordinate[1], helpCoordinate[0]])
+  .addTo(map);
+}
+
+map.on('load', function() {
+    document.getElementById('slider').addEventListener('input', function(e) {
+
+      var number = parseInt(e.target.value, 10);
+
+      if (number > 0) {
+        if (prevIndex!="") {
+          map.removeLayer(prevIndex);
+        }
+        geojson_zero = {
+                    "type": "FeatureCollection",
+                    "features": [{
+                        "type": "Feature",
+                        "geometry": {
+                            "type": "LineString",
+                            "coordinates": []
+                        }
+                    }]
+                };
+        index = makeid();
+
+        for (i = 0; i < number; i++) {
+          // console.log(currentRouteCoordinates[i]);
+          geojson_zero.features[0].geometry.coordinates.push([currentRouteCoordinates[i][1], currentRouteCoordinates[i][0]]);
+        }
+        // id = 'line-animation' + index;
+        id = index;
+        prevIndex = id;
+
+        map.addLayer({
+          'id': id,
+          'type': 'line',
+          'source': {
+              'type': 'geojson',
+              'data': geojson_zero
+          },
+          'layout': {
+              'line-cap': 'round',
+              'line-join': 'round'
+          },
+          'paint': {
+              'line-color': '#ed6498',
+              'line-width': 6,
+              'line-opacity': 1
+          }
+        });
+      }
+
+    });
+
+});
+
+</script>
+
+</body>
+</html>

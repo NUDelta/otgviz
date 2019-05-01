@@ -1,0 +1,6 @@
+*.pyc
+data/*
+test/*
+
+.DS_Store
+
